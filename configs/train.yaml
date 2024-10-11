@@ -1,6 +1,5 @@
 # main paths
-data_path: "MNIST"
-exp_path: "/home/zhanmrt_project/segmentation_template/experiments"
+exp_path: Experiments
 
 # train
 annotations: "train.csv"
@@ -15,7 +14,7 @@ exp_name: unetplusplus_se_resnet101_Tversky_2
 project: Lung_with_background
 
 trainer:
-  devices: [6]
+  devices: [0]
   accelerator: gpu
   precision: 16
   max_epochs: 400

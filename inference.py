@@ -13,17 +13,8 @@ from pl_models import TestModel
 def load_config(config_path):
     with open(config_path, 'r') as input_file:
         config = yaml.safe_load(input_file)
-
     return config
-
-
-def parse_args(args):
-    parser = argparse.ArgumentParser(description='Template to inference networks with pytorch lightning.')
-
-    parser.add_argument('config', help='path to yaml config file', default=None)
-    return parser.parse_args(args)
-
-
+    
 @logger.catch
 def inference(args=None):
     if args is None:
