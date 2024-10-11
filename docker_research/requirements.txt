@@ -1,0 +1,11 @@
+albumentations
+timm
+opencv-python
+pytorch-lightning
+tensorboard
+attrdict
+transformers
+matplotlib
+pandas
+loguru
+monai
