@@ -9,7 +9,8 @@ from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 from pytorch_lightning.strategies import DDPStrategy
 from pytorch_lightning.utilities import rank_zero_only
-from datasets.train import create_loader_dataset
+
+from datasets import create_loader_dataset
 from pl_models import TrainModel
 import shutil
 from loguru import logger
@@ -17,8 +18,9 @@ from loguru import logger
 
 torch.cuda.empty_cache()
 
+
 def load_config(config_path):
-    with open(config_path, 'r') as input_file:
+    with open(config_path, "r") as input_file:
         config = yaml.safe_load(input_file)
 
     return config
@@ -32,7 +34,7 @@ def check_dir(dirname):
     print(f"Save directory - {dirname} exists")
     print("Ignore: Yes[y], No[n]")
     ans = input().lower()
-    if ans == 'y':
+    if ans == "y":
         shutil.rmtree(dirname)
         return
 
@@ -40,9 +42,13 @@ def check_dir(dirname):
 
 
 def parse_args(args):
-    parser = argparse.ArgumentParser(description='Template for training networks with pytorch lightning.')
+    parser = argparse.ArgumentParser(description="Template for training networks with pytorch lightning.")
 
-    parser.add_argument('config', help='path to yaml config file', default="/home/arseniy.zemerov/Research/arseniy.zemerov/NaiveUniform/configs/train.yaml")
+    parser.add_argument(
+        "config",
+        help="path to yaml config file",
+        default="/home/arseniy.zemerov/Research/arseniy.zemerov/NaiveUniform/configs/train.yaml",
+    )
     return parser.parse_args(args)
 
 
@@ -50,29 +56,17 @@ def parse_args(args):
 def train(args=None):
 
     config = load_config("/home/zhan/mrt_project/segmentation_template/configs/train.yaml")
-    config['save_path'] = os.path.join(
-        config['exp_path'],
-        config['project'],
-        config['exp_name']
-    )
+    config["save_path"] = os.path.join(config["exp_path"], config["project"], config["exp_name"])
 
-    check_dir(config['save_path'])
-    os.makedirs(config['save_path'], exist_ok=True)
+    check_dir(config["save_path"])
+    os.makedirs(config["save_path"], exist_ok=True)
 
-    tensorboard_logger = TensorBoardLogger(
-        config['save_path'],
-        name='metrics'
-    )
+    tensorboard_logger = TensorBoardLogger(config["save_path"], name="metrics")
 
-    train_loader, _, weights = create_loader_dataset(
-        config
-    )
+    train_loader, _, weights = create_loader_dataset(config)
 
-    val_loader, _, _ = create_loader_dataset(
-            config,
-            mode="test"
-        )
-    
+    val_loader, _, _ = create_loader_dataset(config, mode="test")
+
     # if config['start_from'] is not None:
     #     model = TrainModel.load_from_checkpoint(
     #         os.path.join(config['start_from'], 'last.ckpt'),
@@ -84,33 +78,25 @@ def train(args=None):
     #     )
     #     print(f"Model loaded from checkpoint: {config['start_from']}")
     # else:
-    model = TrainModel(
-        config,
-        train_loader,
-        val_loader,
-        weights
-    )
+    model = TrainModel(config, train_loader, val_loader, weights)
     checkpoint_callback = ModelCheckpoint(
-        dirpath=config['save_path'],
+        dirpath=config["save_path"],
         save_last=True,
         every_n_epochs=1,
         save_top_k=1,
         save_weights_only=True,
         save_on_train_epoch_end=False,
-        **config['checkpoint']
+        **config["checkpoint"],
     )
 
-    callbacks = [
-        LearningRateMonitor(logging_interval='epoch'),
-        checkpoint_callback
-    ]
+    callbacks = [LearningRateMonitor(logging_interval="epoch"), checkpoint_callback]
 
     trainer = Trainer(
         strategy=DDPStrategy(find_unused_parameters=True),
         callbacks=callbacks,
         logger=tensorboard_logger,
         log_every_n_steps=len(train_loader),
-        **config['trainer']
+        **config["trainer"],
     )
     trainer.fit(model)
 
