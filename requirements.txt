@@ -1,7 +1,17 @@
-torch==2.4.1
-numpy==2.1.2
-pandas==2.2.3
-scikit-learn==1.5.2
+### python <= 3.9 required
 
-pytorch-lightning==2.4.0
-albumentations==1.4.18
+torch
+numpy
+pandas
+scikit-learn
+
+pytorch-lightning
+albumentations
+loguru
+transformers
+attrdict
+pyyaml
+timm
+segmentation-models-pytorch-3d
+tensorboard
+torchinfo

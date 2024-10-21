@@ -10,8 +10,8 @@ val_annotations: "val.csv"
 val_images: "data"
 
 # exp params
-exp_name: unetplusplus_se_resnet101_Tversky_2
-project: Lung_with_background
+exp_name: unet_efficientnet_dice
+project: mri_segmentation
 
 trainer:
   devices: [0]
@@ -21,22 +21,22 @@ trainer:
   sync_batchnorm: True
   gradient_clip_val: 1.0
 
-start_from: 
+start_from: null
 
 loss:
-  loss_type: Tversky
+  loss_type: Dice
   ignore_index: -1
 
 model:
-  model_type: deeplabv3plus # unetplusplus #deeplabv3plus
-  encoder_name: se_resnet101 # densenet161 #se_resnet101
-  in_channels: 3
-  num_classes: 22
+  model_type: unet # [unet, unetplusplus, deeplabv3, deeplabv3plus, pan]
+  encoder_name: efficientnet-b0 # [densenet161, se_resnet101]
+  in_channels: 2
+  num_classes: 4
   encoder_depth: 5
 
 
 dataloader:
-  batch_size: 30
+  batch_size: 3
   num_workers: 3
 
 transforms:

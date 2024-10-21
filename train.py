@@ -10,20 +10,15 @@ from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 from pytorch_lightning.strategies import DDPStrategy
 from pytorch_lightning.utilities import rank_zero_only
 
-from datasets import create_loader_dataset
+from datasets import get_dataloader
 from pl_models import TrainModel
 import shutil
 from loguru import logger
 
+from utils import ROOT_PATH, read_yaml
+from torchinfo import summary
 
 torch.cuda.empty_cache()
-
-
-def load_config(config_path):
-    with open(config_path, "r") as input_file:
-        config = yaml.safe_load(input_file)
-
-    return config
 
 
 @rank_zero_only
@@ -53,9 +48,7 @@ def parse_args(args):
 
 
 @logger.catch
-def train(args=None):
-
-    config = load_config("/home/zhan/mrt_project/segmentation_template/configs/train.yaml")
+def train(config):
     config["save_path"] = os.path.join(config["exp_path"], config["project"], config["exp_name"])
 
     check_dir(config["save_path"])
@@ -63,22 +56,12 @@ def train(args=None):
 
     tensorboard_logger = TensorBoardLogger(config["save_path"], name="metrics")
 
-    train_loader, _, weights = create_loader_dataset(config)
+    train_loader = get_dataloader(config)
+    val_loader = get_dataloader(config, mode="val")
 
-    val_loader, _, _ = create_loader_dataset(config, mode="test")
+    model = TrainModel(config, train_loader, val_loader)
+    summary(model.model, input_data=None)
 
-    # if config['start_from'] is not None:
-    #     model = TrainModel.load_from_checkpoint(
-    #         os.path.join(config['start_from'], 'last.ckpt'),
-    #         hparams_file=os.path.join(config['start_from'], 'metrics/version_0/hparams.yaml'),
-    #         config = config,
-    #         train_loader = train_loader,
-    #         val_loader = val_loader,
-    #         weights = weights
-    #     )
-    #     print(f"Model loaded from checkpoint: {config['start_from']}")
-    # else:
-    model = TrainModel(config, train_loader, val_loader, weights)
     checkpoint_callback = ModelCheckpoint(
         dirpath=config["save_path"],
         save_last=True,
@@ -102,4 +85,7 @@ def train(args=None):
 
 
 if __name__ == "__main__":
-    train()
+    config_path = ROOT_PATH / "configs/train.yaml"
+    config = read_yaml(config_path)
+
+    train(config)

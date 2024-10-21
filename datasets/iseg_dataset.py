@@ -3,11 +3,10 @@ from pathlib import Path
 from torch.utils.data import Dataset, DataLoader
 import torch
 import torchio as tio
+from utils import ROOT_PATH
 import SimpleITK as sitk
 
 sitk.ProcessObject_SetGlobalWarningDisplay(False)
-
-ROOT_PATH = Path(__file__).absolute().resolve().parent.parent
 
 
 class iSegDataset(Dataset):
@@ -38,13 +37,14 @@ class iSegDataset(Dataset):
         for idx in data.keys():
             t1_image = data[idx]["T1"].tensor
             t2_image = data[idx]["T2"].tensor
-            label_image = data[idx]["label"].tensor  # [1, depth, height, width]
 
             image = torch.cat([t1_image, t2_image], dim=0)
             image = image.unsqueeze(0)  # [1, channels=2, depth, height, width]
-
             self.images.append(image)
-            self.labels.append(label_image)
+
+            if self.mode == "train":
+                label_image = data[idx]["label"].tensor  # [1, depth, height, width]
+                self.labels.append(label_image)
 
     def __len__(self):
         return len(self.images)
@@ -57,12 +57,14 @@ class iSegDataset(Dataset):
             - label (Tensor): labeled pixels of size [1, depth, height, width]
         """
         image = self.images[idx]
-        label = self.labels[idx]
-
         if self.transforms is not None:
             image = self.transforms(image)
 
-        return image, label
+        if self.mode == "train":
+            label = self.labels[idx]
+            return image, label
+
+        return image
 
 
 def collate_fn(batch: list[tuple]):
@@ -78,12 +80,12 @@ def collate_fn(batch: list[tuple]):
     return batched_images, batched_labels
 
 
-def create_loader_dataset(config, mode="train"):
-    dataset = TorchDataset(config, mode=mode)
+def get_dataloader(config, mode="train"):
+    dataset = iSegDataset(config, mode=mode)
     dataloader = DataLoader(
         dataset,
         shuffle=(mode == "train"),
         collate_fn=collate_fn,
         **config["dataloader"],
     )
-    return dataloader, dataset
+    return dataloader

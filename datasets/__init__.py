@@ -1,1 +1,1 @@
-from .iseg_dataset import create_loader_dataset
+from .iseg_dataset import get_dataloader
