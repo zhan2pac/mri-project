@@ -7,7 +7,7 @@ import torch
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
-from pytorch_lightning.strategies import DDPStrategy
+from pytorch_lightning.strategies import SingleDeviceStrategy, DDPStrategy
 from pytorch_lightning.utilities import rank_zero_only
 
 from datasets import get_dataloader
@@ -72,15 +72,16 @@ def train(config):
         **config["checkpoint"],
     )
 
-    callbacks = [LearningRateMonitor(logging_interval="epoch"), checkpoint_callback]
+    lr_callback = LearningRateMonitor(logging_interval="epoch")
 
     trainer = Trainer(
         strategy=DDPStrategy(find_unused_parameters=True),
-        callbacks=callbacks,
+        callbacks=[lr_callback, checkpoint_callback],
         logger=tensorboard_logger,
         log_every_n_steps=len(train_loader),
         **config["trainer"],
     )
+
     trainer.fit(model)
 
 

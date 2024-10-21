@@ -25,7 +25,11 @@ class TrainModel(pl.LightningModule):
         self.train_loader = train_loader
         self.val_loader = val_loader
 
-        self.num_training_steps = math.ceil(len(self.train_loader) / len(config["trainer"]["devices"]))
+        if config["trainer"]["accelerator"] == "gpu":
+            self.num_training_steps = math.ceil(len(self.train_loader) / len(config["trainer"]["devices"]))
+        else:
+            self.num_training_steps = len(self.train_loader)
+
         self.model = TorchModel(config["model"])
         self.criterion = TorchLoss(config["loss"])
 
@@ -57,7 +61,7 @@ class TrainModel(pl.LightningModule):
         tensors = self.all_gather(tensors)
         return torch.cat([t for t in tensors])
 
-    def validation_epoch_end(self, outputs):
+    def on_validation_epoch_end(self, outputs):
         out_val = {}
         for key in outputs[0].keys():
             if key == "loss":

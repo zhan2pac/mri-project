@@ -12,6 +12,7 @@ class TorchModel(nn.Module):
             encoder_weights="imagenet",  # use `imagenet` pre-trained weights for encoder initialization
             in_channels=config["in_channels"],  # model input channels (1 for gray-scale images, 3 for RGB, etc.)
             classes=config["num_classes"],  # model output channels (number of classes in your dataset)
+            encoder_depth=config["encoder_depth"],
         )
 
     def forward(self, x):
