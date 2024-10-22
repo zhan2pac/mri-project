@@ -55,11 +55,11 @@ class iSegDataset(Dataset):
             label_image = subject["label"].tensor
             label_image = self.resize(label_image).long()  # [1, depth, height, width]
 
-            if self.mode == "train" and (idx % 2 == 0):
+            if self.mode == "train" and (idx <= 6):
                 self.images.append(image)
                 self.labels.append(label_image)
 
-            elif self.mode == "val" and (idx % 2 == 1):
+            elif self.mode == "val" and (idx > 6):
                 self.images.append(image)
                 self.labels.append(label_image)
 

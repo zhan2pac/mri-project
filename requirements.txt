@@ -5,7 +5,8 @@ numpy
 pandas
 scikit-learn
 
-pytorch-lightning
+torchio
+pytorch-lightning==2.0.8
 albumentations
 loguru
 transformers
@@ -14,4 +15,5 @@ pyyaml
 timm
 segmentation-models-pytorch-3d
 tensorboard
+wandb
 torchinfo

@@ -1,23 +1,15 @@
 # main paths
 exp_path: Experiments
 
-# train
-annotations: "train.csv"
-images: "data"
-
-# validation
-val_annotations: "val.csv"
-val_images: "data"
-
 # exp params
 exp_name: unet_efficientnet_dice
 project: mri_segmentation
 
 trainer:
-  devices: [0]
+  devices: [5]
   accelerator: gpu
   precision: 16
-  max_epochs: 400
+  max_epochs: 30
   sync_batchnorm: True
   gradient_clip_val: 1.0
 
@@ -36,8 +28,8 @@ model:
 
 
 dataloader:
-  batch_size: 3
-  num_workers: 3
+  batch_size: 2
+  num_workers: 2
 
 transforms:
   aug_prob: 1.0

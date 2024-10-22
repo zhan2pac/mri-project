@@ -4,7 +4,7 @@ import sys
 import argparse
 import yaml
 import torch
-from pytorch_lightning.loggers import TensorBoardLogger
+from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 from pytorch_lightning.strategies import SingleDeviceStrategy, DDPStrategy
@@ -49,12 +49,13 @@ def parse_args(args):
 
 @logger.catch
 def train(config):
+    print("torch.cuda.is_available: >>>>>>", torch.cuda.is_available())
     config["save_path"] = os.path.join(config["exp_path"], config["project"], config["exp_name"])
 
-    check_dir(config["save_path"])
-    os.makedirs(config["save_path"], exist_ok=True)
+    # check_dir(config["save_path"])
+    # os.makedirs(config["save_path"], exist_ok=True)
 
-    tensorboard_logger = TensorBoardLogger(config["save_path"], name="metrics")
+    logger = WandbLogger(name=config["exp_name"], save_dir=config["save_path"])
 
     train_loader = get_dataloader(config)
     val_loader = get_dataloader(config, mode="val")
@@ -77,8 +78,8 @@ def train(config):
     trainer = Trainer(
         strategy=DDPStrategy(find_unused_parameters=True),
         callbacks=[lr_callback, checkpoint_callback],
-        logger=tensorboard_logger,
-        log_every_n_steps=len(train_loader),
+        logger=logger,
+        log_every_n_steps=1,
         **config["trainer"],
     )
 

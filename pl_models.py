@@ -35,6 +35,8 @@ class TrainModel(pl.LightningModule):
 
         self.save_hyperparameters(AttrDict(config))
 
+        self.validation_step_outputs = []
+
     def train_dataloader(self):
         return self.train_loader
 
@@ -55,13 +57,16 @@ class TrainModel(pl.LightningModule):
         tp, fp, fn, tn = smpm.get_stats(
             torch.argmax(y_hat, dim=1), y, mode="multiclass", num_classes=self.num_classes, ignore_index=-1
         )
-        return {"loss": loss.cpu(), "tp": tp.cpu(), "fp": fp.cpu(), "fn": fn.cpu(), "tn": tn.cpu()}
+        outputs = {"loss": loss.cpu(), "tp": tp.cpu(), "fp": fp.cpu(), "fn": fn.cpu(), "tn": tn.cpu()}
+        self.validation_step_outputs.append(outputs)
+        return outputs
 
     def sync_across_gpus(self, tensors):
         tensors = self.all_gather(tensors)
         return torch.cat([t for t in tensors])
 
-    def on_validation_epoch_end(self, outputs):
+    def on_validation_epoch_end(self):
+        outputs = self.validation_step_outputs
         out_val = {}
         for key in outputs[0].keys():
             if key == "loss":
@@ -73,16 +78,20 @@ class TrainModel(pl.LightningModule):
         #     out_val[key] = self.sync_across_gpus(out_val[key])
 
         loss = out_val["loss"].mean()
-        self.log("loss/val", loss, prog_bar=False, rank_zero_only=True, sync_dist=False)
+        self.log("loss/val", loss, prog_bar=False, rank_zero_only=True, sync_dist=True)
+        print("loss/val", loss)
         # result_metrics = class_metrics_multi(out_val['output'], out_val['target'])
         result_metrics = class_metrics_multi(out_val["tp"], out_val["fp"], out_val["fn"], out_val["tn"])
         for metric, result in result_metrics.items():
             if len(result) > 1:
                 for i, res in enumerate(result):
-                    self.log(f"{metric}/class_{i}", res, sync_dist=False)
-                self.log(f"{metric}/mean", result.mean(), sync_dist=False)
+                    self.log(f"{metric}/class_{i}", res, sync_dist=True)
+                    print(f"{metric}/class_{i}", res)
+                self.log(f"{metric}/mean", result.mean(), sync_dist=True)
+                print(f"{metric}/mean", result.mean())
             else:
-                self.log(f"{metric}/mean", np.mean(result), sync_dist=False)
+                self.log(f"{metric}/mean", np.mean(result), sync_dist=True)
+                print(f"{metric}/mean", np.mean(result))
 
     def configure_optimizers(self):
         if self.hparams.optimizer == "adam":
@@ -144,6 +153,8 @@ class TestModel(pl.LightningModule):
         self.save_hyperparameters(AttrDict(config))
         self.softmax = torch.nn.Softmax(dim=1)
 
+        self.test_step_outputs = []
+
     def test_dataloader(self):
         return self.test_loader
 
@@ -152,13 +163,17 @@ class TestModel(pl.LightningModule):
         y_hat = self.model(x)
         y_hat = [self.softmax(y) for y in y_hat]
         # y_hat = torch.argmax(y_hat, dim=1)
-        return {"y_hat_1": y_hat[0], "y_hat_2": y_hat[1], "idx": ids}
+        outputs = {"y_hat_1": y_hat[0], "y_hat_2": y_hat[1], "idx": ids}
+
+        self.test_step_outputs.append(outputs)
+        return outputs
 
     def sync_across_gpus(self, tensors):
         tensors = self.all_gather(tensors)
         return torch.cat([t for t in tensors])
 
-    def test_epoch_end(self, outputs):
+    def on_test_epoch_end(self):
+        outputs = self.test_step_outputs
         y_hat_1 = torch.cat([o["y_hat_1"] for o in outputs], dim=0).cpu().detach().tolist()
         y_hat_2 = torch.cat([o["y_hat_2"] for o in outputs], dim=0).cpu().detach().tolist()
         ids = torch.cat([o["idx"] for o in outputs], dim=0).cpu().detach().tolist()
