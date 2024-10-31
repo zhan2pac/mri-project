@@ -11,12 +11,11 @@ from pytorch_lightning.strategies import SingleDeviceStrategy, DDPStrategy
 from pytorch_lightning.utilities import rank_zero_only
 
 from datasets import get_dataloader
-from pl_models import TrainModel
+from pl_models import LightningModel
 import shutil
 from loguru import logger
 
 from utils import ROOT_PATH, read_yaml
-from torchinfo import summary
 
 torch.cuda.empty_cache()
 
@@ -36,17 +35,6 @@ def check_dir(dirname):
     raise ValueError("Tried to log experiment into existing directory")
 
 
-def parse_args(args):
-    parser = argparse.ArgumentParser(description="Template for training networks with pytorch lightning.")
-
-    parser.add_argument(
-        "config",
-        help="path to yaml config file",
-        default="/home/arseniy.zemerov/Research/arseniy.zemerov/NaiveUniform/configs/train.yaml",
-    )
-    return parser.parse_args(args)
-
-
 @logger.catch
 def train(config):
     print("torch.cuda.is_available: >>>>>>", torch.cuda.is_available())
@@ -60,8 +48,7 @@ def train(config):
     train_loader = get_dataloader(config)
     val_loader = get_dataloader(config, mode="val")
 
-    model = TrainModel(config, train_loader, val_loader)
-    summary(model.model, input_data=None)
+    model = LightningModel(config, train_loader, val_loader)
 
     checkpoint_callback = ModelCheckpoint(
         dirpath=config["save_path"],

@@ -11,6 +11,17 @@ from pl_models import TestModel
 from utils import ROOT_PATH, read_yaml
 
 
+def parse_args(args):
+    parser = argparse.ArgumentParser(description="Template for training networks with pytorch lightning.")
+
+    parser.add_argument(
+        "config",
+        help="path to yaml config file",
+        default="/home/arseniy.zemerov/Research/arseniy.zemerov/NaiveUniform/configs/train.yaml",
+    )
+    return parser.parse_args(args)
+
+
 @logger.catch
 def inference(args=None):
     if args is None:

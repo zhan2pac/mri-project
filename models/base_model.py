@@ -1,5 +1,6 @@
 import torch.nn as nn
 import segmentation_models_pytorch_3d as smp
+from torchinfo import summary
 
 
 class TorchModel(nn.Module):
@@ -14,6 +15,7 @@ class TorchModel(nn.Module):
             classes=config["num_classes"],  # model output channels (number of classes in your dataset)
             encoder_depth=config["encoder_depth"],
         )
+        summary(self.model)
 
     def forward(self, x):
         return self.model(x)

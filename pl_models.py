@@ -14,11 +14,19 @@ from metrics import class_metrics_multi, class_metrics_binary
 from collections import OrderedDict
 import numpy as np
 import segmentation_models_pytorch_3d.metrics as smpm
+import wandb
+
+CLASS_NAME = {
+    0: "void",
+    1: "CSF",
+    2: "GM",
+    3: "WM",
+}
 
 
-class TrainModel(pl.LightningModule):
+class LightningModel(pl.LightningModule):
     def __init__(self, config, train_loader, val_loader):
-        super(TrainModel, self).__init__()
+        super(LightningModel, self).__init__()
         self.config = config
         self.num_classes = config["model"]["num_classes"]
 
@@ -45,19 +53,28 @@ class TrainModel(pl.LightningModule):
 
     def training_step(self, batch, batch_nb):
         x, y = batch
-        y_hat = self.model(x)
-        loss = self.criterion(y_hat, y)
+        pred_y = self.model(x)
+        loss = self.criterion(pred_y, y)
         self.log("loss/train", loss, on_step=False, on_epoch=True, rank_zero_only=True, sync_dist=True)
         return loss
 
     def validation_step(self, batch, batch_nb):
         x, y = batch
-        y_hat = self.model(x)
-        loss = self.criterion(y_hat, y)
-        tp, fp, fn, tn = smpm.get_stats(
-            torch.argmax(y_hat, dim=1), y, mode="multiclass", num_classes=self.num_classes, ignore_index=-1
-        )
-        outputs = {"loss": loss.cpu(), "tp": tp.cpu(), "fp": fp.cpu(), "fn": fn.cpu(), "tn": tn.cpu()}
+        logits = self.model(x)
+        loss = self.criterion(logits, y)
+        pred_y = torch.argmax(logits, dim=1)
+        tp, fp, fn, tn = smpm.get_stats(pred_y, y, mode="multiclass", num_classes=self.num_classes, ignore_index=-1)
+
+        outputs = {
+            "loss": loss.cpu(),
+            "tp": tp.cpu(),
+            "fp": fp.cpu(),
+            "fn": fn.cpu(),
+            "tn": tn.cpu(),
+            "x": x[0].detach().cpu().numpy(),
+            "y": y[0].detach().cpu().numpy(),
+            "pred_y": pred_y[0].detach().cpu().numpy(),
+        }
         self.validation_step_outputs.append(outputs)
         return outputs
 
@@ -68,7 +85,7 @@ class TrainModel(pl.LightningModule):
     def on_validation_epoch_end(self):
         outputs = self.validation_step_outputs
         out_val = {}
-        for key in outputs[0].keys():
+        for key in ("loss", "tp", "fp", "fn", "tn"):
             if key == "loss":
                 out_val[key] = torch.stack([o[key] for o in outputs])
             else:
@@ -79,19 +96,58 @@ class TrainModel(pl.LightningModule):
 
         loss = out_val["loss"].mean()
         self.log("loss/val", loss, prog_bar=False, rank_zero_only=True, sync_dist=True)
-        print("loss/val", loss)
-        # result_metrics = class_metrics_multi(out_val['output'], out_val['target'])
+
         result_metrics = class_metrics_multi(out_val["tp"], out_val["fp"], out_val["fn"], out_val["tn"])
         for metric, result in result_metrics.items():
             if len(result) > 1:
                 for i, res in enumerate(result):
-                    self.log(f"{metric}/class_{i}", res, sync_dist=True)
-                    print(f"{metric}/class_{i}", res)
+                    self.log(f"{metric}/{CLASS_NAME[i]}", res, sync_dist=True)
+
                 self.log(f"{metric}/mean", result.mean(), sync_dist=True)
-                print(f"{metric}/mean", result.mean())
+
             else:
                 self.log(f"{metric}/mean", np.mean(result), sync_dist=True)
-                print(f"{metric}/mean", np.mean(result))
+
+        last_outputs = outputs[-1]
+        self.log_segmentation_images(last_outputs["x"], last_outputs["y"], last_outputs["pred_y"])
+
+    @staticmethod
+    def wandb_mask(bg_img, pred_mask, true_mask):
+        return wandb.Image(
+            bg_img,
+            masks={
+                "prediction": {"mask_data": pred_mask, "class_labels": CLASS_NAME},
+                "ground truth": {"mask_data": true_mask, "class_labels": CLASS_NAME},
+            },
+        )
+
+    def log_segmentation_images(self, x, y, pred_y):
+        """
+        Args:
+            - x: image array of shape (2, 160, 192, 256)
+            - y: target mask array of shape(160, 192, 256)
+            - pred_y: predicted mask array of shape (160, 192, 256)
+        """
+        x = x[0]  # take T1 channel
+
+        slice = (y.shape[2] // 2, y.shape[1] // 2, y.shape[0] // 2)
+
+        sliced_images = [
+            (x[slice[0], :, :], y[slice[0], :, :], pred_y[slice[0], :, :]),
+            (x[:, slice[1], :], y[:, slice[1], :], pred_y[:, slice[1], :]),
+            (x[:, :, slice[2]], y[:, :, slice[2]], pred_y[:, :, slice[2]]),
+        ]
+
+        mask_list = []
+        for i, (x_2d, y_2d, pred_y_2d) in enumerate(sliced_images):
+
+            bg_image = (x_2d * 255).astype(np.uint8)
+            pred_mask = y_2d.astype(np.uint8)
+            true_mask = pred_y_2d.astype(np.uint8)
+
+            mask_list.append(self.wandb_mask(bg_image, pred_mask, true_mask))
+
+        self.logger.experiment.log({"predictions": mask_list})
 
     def configure_optimizers(self):
         if self.hparams.optimizer == "adam":
@@ -160,10 +216,10 @@ class TestModel(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         x, ids = batch
-        y_hat = self.model(x)
-        y_hat = [self.softmax(y) for y in y_hat]
-        # y_hat = torch.argmax(y_hat, dim=1)
-        outputs = {"y_hat_1": y_hat[0], "y_hat_2": y_hat[1], "idx": ids}
+        logits = self.model(x)
+        pred_y = [self.softmax(y) for logit in logits]
+        # pred_y = torch.argmax(pred_y, dim=1)
+        outputs = {"pred_y_1": pred_y[0], "pred_y_2": pred_y[1], "idx": ids}
 
         self.test_step_outputs.append(outputs)
         return outputs
@@ -174,12 +230,12 @@ class TestModel(pl.LightningModule):
 
     def on_test_epoch_end(self):
         outputs = self.test_step_outputs
-        y_hat_1 = torch.cat([o["y_hat_1"] for o in outputs], dim=0).cpu().detach().tolist()
-        y_hat_2 = torch.cat([o["y_hat_2"] for o in outputs], dim=0).cpu().detach().tolist()
+        pred_y_1 = torch.cat([o["pred_y_1"] for o in outputs], dim=0).cpu().detach().tolist()
+        pred_y_2 = torch.cat([o["pred_y_2"] for o in outputs], dim=0).cpu().detach().tolist()
         ids = torch.cat([o["idx"] for o in outputs], dim=0).cpu().detach().tolist()
         data = [
             [self.test_dataset.images[idx], prediction_1, prediction_2]
-            for idx, prediction_1, prediction_2 in zip(ids, y_hat_1, y_hat_2)
+            for idx, prediction_1, prediction_2 in zip(ids, pred_y_1, pred_y_2)
         ]
         df = pd.DataFrame(data, columns=["filename", *self.hparams.classnames]).drop_duplicates()
         file_path = os.path.join(self.hparams.save_path, self.hparams.test_name, "predictions.csv")
